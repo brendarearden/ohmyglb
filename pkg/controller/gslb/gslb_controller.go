@@ -2,6 +2,7 @@ package gslb
 
 import (
 	"context"
+	"time"
 
 	ohmyglbv1beta1 "github.com/AbsaOSS/ohmyglb/pkg/apis/ohmyglb/v1beta1"
 	v1beta1 "k8s.io/api/extensions/v1beta1"
@@ -126,6 +127,6 @@ func (r *ReconcileGslb) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 
 	// == Finish ==========
-	// Everything went fine, don't requeue
-	return reconcile.Result{}, nil
+	// Everything went fine, requeue periodically to watch Service/Endoints health status which we are not controlling directly
+	return reconcile.Result{RequeueAfter: time.Second * 5}, nil
 }
