@@ -21,7 +21,9 @@ A Global Service Load Balancing solution with a focus on having cloud native qua
         - [Verify installation](#verify-installation)
         - [Run integration tests](#run-integration-tests)
         - [Cleaning](#cleaning)
-
+- [Metrics](#metrics)
+    - [General metrics](#general-metrics)
+    - [Custom resource specific metrics](#custom-resource-specific-metrics)
 
 ## Motivation and Architecture
 
@@ -47,31 +49,30 @@ for customization options.
 #### Environment prerequisites
 
  - [install **GO 1.14**](https://golang.org/dl/)
- 
- - [install **GIT**](https://git-scm.com/downloads)     
-    
- - install **gnu-sed** if you don't have it  
+
+ - [install **GIT**](https://git-scm.com/downloads)
+
+ - install **gnu-sed** if you don't have it
     - If you are on a Mac, install sed by Homebrew
     ```shell script
-    brew install gnu-sed 
-    ``` 
-   
+    brew install gnu-sed
+    ```
+
  - [install **Docker**](https://docs.docker.com/get-docker/)
     - ensure you are able to push/pull from your docker registry
-    - to run multiple clusters reserve 8GB of memory  
-    
+    - to run multiple clusters reserve 8GB of memory
+
       ![](docs/images/docker_settings.png)
       <div>
         <sup>above screenshot is for <strong>Docker for Mac</strong> and that options for other Docker distributions may vary</sup>
       </div>
 
  - [install **Kubectl**](https://kubernetes.io/docs/tasks/tools/install-kubectl/) to operate clusters
-     
+
  - [install **Helm3**](https://helm.sh/docs/intro/install/) to get charts
- 
+
  - [install **kind**](https://kind.sigs.k8s.io/) as tool for running local Kubernetes clusters
     - follow https://kind.sigs.k8s.io/docs/user/quick-start/
- 
 
 
 #### Running project locally
@@ -81,8 +82,8 @@ To spin-up a local environment using two Kind clusters and deploy a test applica
 make deploy-full-local-setup 
 ```
 
-
 #### Verify installation
+
 If local setup runs well, check if clusters are correctly installed 
 
 ```shell script
@@ -129,16 +130,89 @@ curl localhost:80 -H "Host:app3.cloud.example.com" && curl localhost:81 -H "Host
 ```
 
 #### Run integration tests
+
 There is wide range of scenarios which **GSLB** provides and all of them are covered within [tests](terratest).
 To check whether everything is running properly execute [terratests](https://terratest.gruntwork.io/) :
-  
+
 ```shell script
 make terratest
 ```
-    
+
 #### Cleaning
+
 Clean up your local development clusters with
-  
 ```shell script
 make destroy-full-local-setup
 ```
+
+## Metrics
+
+OhMyGLB generates [Prometheus][prometheus]-compatible metrics.
+Metrics endpoints are exposed via `-metrics` service in operator namespace and can be scraped by 3rd party tools:
+
+``` yaml
+spec:
+...
+  ports:
+  - name: http-metrics
+    port: 8383
+    protocol: TCP
+    targetPort: 8383
+  - name: cr-metrics
+    port: 8686
+    protocol: TCP
+    targetPort: 8686
+```
+
+Metrics can be also automatically discovered and monitored by [Prometheus Operator][prometheus-operator] via automatically generated [ServiceMonitor][service-monitor] CRDs , in case if [Prometheus Operator][prometheus-operator]  is deployed into the cluster.
+
+### General metrics
+
+[controller-runtime][controller-runtime-metrics] standard metrics, extended with OhMyGLB operator-specific metrics listed below:
+
+#### `healthy_records_total`
+
+Number of healthy records observed by OhMyGLB.
+
+Example:
+
+```yaml
+# HELP ohmyglb_gslb_healthy_records_total Number of healthy records observed by OhMyGLB.
+# TYPE ohmyglb_gslb_healthy_records_total gauge
+ohmyglb_gslb_healthy_records_total{name="test-gslb",namespace="test-gslb"} 6
+```
+
+#### `managed_hosts_total`
+
+Number of managed hosts observed by OhMyGLB.
+
+Example:
+
+```yaml
+# HELP ohmyglb_gslb_managed_hosts_total Number of managed hosts observed by OhMyGLB.
+# TYPE ohmyglb_gslb_managed_hosts_total gauge
+ohmyglb_gslb_managed_hosts_total{name="test-gslb",namespace="test-gslb",status="Healthy"} 1
+ohmyglb_gslb_managed_hosts_total{name="test-gslb",namespace="test-gslb",status="NotFound"} 1
+ohmyglb_gslb_managed_hosts_total{name="test-gslb",namespace="test-gslb",status="Unhealthy"} 2
+```
+
+Served on `0.0.0.0:8383/metrics` endpoint
+
+### Custom resource specific metrics
+
+Info metrics, automatically exposed by operator based on the number of the current instances of an operator's custom resources in the cluster.
+
+Example:
+
+```yaml
+# HELP gslb_info Information about the Gslb custom resource.
+# TYPE gslb_info gauge
+gslb_info{namespace="test-gslb",gslb="test-gslb"} 1
+```
+
+Served on `0.0.0.0:8686/metrics` endoint
+
+[prometheus]: https://prometheus.io/
+[prometheus-operator]: https://github.com/coreos/prometheus-operator
+[service-monitor]: https://github.com/coreos/prometheus-operator#customresourcedefinitions
+[controller-runtime-metrics]: https://book.kubebuilder.io/reference/metrics.html
